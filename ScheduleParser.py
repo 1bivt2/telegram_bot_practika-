@@ -676,7 +676,6 @@ def send_schedule(message):
         else:
             bot.edit_message_text("⚠️ Ошибка при загрузке расписания. Попробуйте позже.",
                                   message.chat.id, msg.message_id)
-
         del parser
 
     except Exception as e:
