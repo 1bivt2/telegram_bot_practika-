@@ -668,7 +668,6 @@ def send_schedule(message):
                 bot.delete_message(message.chat.id, msg.message_id)
                 max_length = 4000
                 parts = [formatted[i:i + max_length] for i in range(0, len(formatted), max_length)]
-
                 for part in parts:
                     bot.send_message(message.chat.id, part, parse_mode='Markdown')
             else:
