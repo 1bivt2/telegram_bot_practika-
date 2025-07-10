@@ -568,7 +568,8 @@ def create_main_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn_group = types.KeyboardButton('👥 Выбрать группу')
     btn_schedule = types.KeyboardButton('📅 Получить расписание')
-    markup.add(btn_group, btn_schedule)
+    btn_back = types.KeyboardButton('🔙 Возврат в главное меню')  # Новая кнопка
+    markup.add(btn_group, btn_schedule, btn_back)
     return markup
 
 
