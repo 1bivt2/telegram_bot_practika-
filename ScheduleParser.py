@@ -81,18 +81,20 @@ def handle_callback(call):
         )
 
     elif call.data == 'schedule':
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        bt_menu = types.KeyboardButton('🔗 Перейти к расписанию',
-                                       web_app=WebAppInfo('https://raspisanie.madi.ru/tplan/'))
-        bt_back = types.KeyboardButton('🔙 Возврат в главное меню')
-        markup.add(bt_menu)
-        markup.add(bt_back)
 
-        bot.send_message(
-            call.message.chat.id,
-            "Актуальное расписание для всех групп доступно на официальном сайте МАДИ",
-            reply_markup=markup
-        )
+        show_schedule_menu(call.message)
+
+    elif call.data == 'select_group':
+
+        ask_for_group_name(call.message)
+
+    elif call.data == 'get_schedule':
+
+        handle_get_schedule(call)
+
+    elif call.data == 'back_to_schedule':
+
+        show_schedule_menu(call.message)
 
     elif call.data == 'traditions':
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -277,7 +279,155 @@ def handle_reply_buttons(message):
             reply_markup=markup
         )
         bot.register_next_step_handler(message, objects_text)
+        # Добавьте этот код в раздел обработки текстовых сообщений (функцию handle_reply_buttons)
 
+    elif message.text == '👥 Выбрать группу':
+        try:
+            parser = MadiScheduleParser()
+            groups = parser.get_groups()
+            del parser
+
+            if not groups:
+                error_markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+                error_markup.add(types.KeyboardButton('🔙 Назад'))
+                bot.send_message(
+                    message.chat.id,
+                    "⚠️ Не удалось загрузить список групп. Попробуйте позже.",
+                    reply_markup=error_markup
+                )
+                return
+
+            # Создаем клавиатуру с группами (максимум 20 групп)
+            markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+            buttons = [types.KeyboardButton(group) for group in sorted(groups)[:20]]
+            markup.add(*buttons)
+            markup.add(types.KeyboardButton('🔙 Назад'))
+
+            # Сохраняем данные пользователя
+            user_data[message.chat.id] = {
+                'groups': groups,
+                'waiting_for_group': True,
+                'previous_markup': message.reply_markup  # Сохраняем предыдущую клавиатуру
+            }
+
+            loading_msg = bot.send_message(
+                message.chat.id,
+                "⌛ Загружаю список групп...",
+                reply_markup=types.ReplyKeyboardRemove()
+            )
+
+            # Удаляем сообщение "Загружаю" и показываем список групп
+            bot.delete_message(message.chat.id, loading_msg.message_id)
+            bot.send_message(
+                message.chat.id,
+                "👇 Пожалуйста, выберите вашу группу из списка:",
+                reply_markup=markup
+            )
+
+        except Exception as e:
+            error_markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+            error_markup.add(types.KeyboardButton('🔙 Назад'))
+            bot.send_message(
+                message.chat.id,
+                f"⚠️ Ошибка при загрузке групп: {str(e)}",
+                reply_markup=error_markup
+            )
+            print(f"Ошибка при выборе группы: {e}")
+
+    # Обработчик выбора конкретной группы
+    elif message.chat.id in user_data and user_data[message.chat.id].get('waiting_for_group', False):
+        if message.text == '🔙 Назад':
+            # Возвращаемся к предыдущему меню
+            user_data[message.chat.id]['waiting_for_group'] = False
+            markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+            markup.add(
+                types.KeyboardButton('👥 Выбрать группу'),
+                types.KeyboardButton('📅 Получить расписание')
+            )
+            markup.add(types.KeyboardButton('🔙 Возврат в главное меню'))
+
+            bot.send_message(
+                message.chat.id,
+                "<b>📅 Расписание МАДИ</b>\n\nВыберите действие:",
+                reply_markup=markup
+            )
+            return
+
+        # Проверяем, что выбранная группа есть в списке
+        if message.text not in user_data[message.chat.id]['groups']:
+            bot.send_message(
+                message.chat.id,
+                "⚠️ Выбранная группа не найдена. Пожалуйста, выберите группу из списка."
+            )
+            return
+
+        # Сохраняем выбранную группу
+        user_data[message.chat.id].update({
+            'selected_group': message.text,
+            'waiting_for_group': False
+        })
+
+        # Создаем клавиатуру для работы с расписанием
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+        markup.add(
+            types.KeyboardButton('👥 Выбрать группу'),
+            types.KeyboardButton('📅 Получить расписание')
+        )
+        markup.add(types.KeyboardButton('🔙 Возврат в главное меню'))
+
+        # Отправляем подтверждение
+        bot.send_message(
+            message.chat.id,
+            f"✅ Группа <b>{message.text}</b> успешно выбрана!\n"
+            "Теперь вы можете получить расписание.",
+            reply_markup=markup,
+            parse_mode='HTML'
+        )
+    elif message.text == '📅 Получить расписание':
+        if message.chat.id not in user_data or 'selected_group' not in user_data[message.chat.id]:
+            bot.send_message(message.chat.id, "ℹ️ Сначала выберите группу")
+            return
+
+        send_schedule(message)
+
+    elif message.text == '🔙 Назад':
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+        btn_group = types.KeyboardButton('👥 Выбрать группу')
+        btn_schedule = types.KeyboardButton('📅 Получить расписание')
+        btn_back = types.KeyboardButton('🔙 Назад')
+        markup.add(btn_group, btn_schedule, btn_back)
+
+        bot.send_message(message.chat.id, "<b>📅 Расписание МАДИ</b>\n\nВыберите действие:", reply_markup=markup)
+
+    elif message.chat.id in user_data and user_data[message.chat.id].get('waiting_for_group', False):
+        if message.text == '🔙 Назад':
+            user_data[message.chat.id]['waiting_for_group'] = False
+            markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+            btn_group = types.KeyboardButton('👥 Выбрать группу')
+            btn_schedule = types.KeyboardButton('📅 Получить расписание')
+            btn_back = types.KeyboardButton('🔙 Назад')
+            markup.add(btn_group, btn_schedule, btn_back)
+            bot.send_message(message.chat.id, "<b>📅 Расписание МАДИ</b>\n\nВыберите действие:", reply_markup=markup)
+            return
+
+        if message.text not in user_data[message.chat.id]['groups']:
+            bot.send_message(message.chat.id, "⚠️ Пожалуйста, выберите группу из предложенного списка.")
+            return
+
+        user_data[message.chat.id]['selected_group'] = message.text
+        user_data[message.chat.id]['waiting_for_group'] = False
+
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+        btn_group = types.KeyboardButton('👥 Выбрать группу')
+        btn_schedule = types.KeyboardButton('📅 Получить расписание')
+        btn_back = types.KeyboardButton('🔙 Назад')
+        markup.add(btn_group, btn_schedule, btn_back)
+
+        bot.send_message(
+            message.chat.id,
+            f"✅ Группа {message.text} сохранена!\nТеперь вы можете получить расписание",
+            reply_markup=markup
+        )
     elif message.text == '🔙 Возврат в главное меню':
         handle_back_button(message)
 
@@ -408,7 +558,7 @@ class MadiScheduleParser:
         chrome_options = Options()
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        self.service = Service(executable_path=r'Здесь требуется указать путь к chromedriver.exe')
+        self.service = Service(executable_path=r'C:\chromedriver-win64\chromedriver.exe')
         self.driver = webdriver.Chrome(service=self.service, options=chrome_options)
 
     def __del__(self):
@@ -653,12 +803,10 @@ def handle_group_selection(message):
 def send_schedule(message):
     try:
         if message.chat.id not in user_data or 'selected_group' not in user_data[message.chat.id]:
-            bot.send_message(message.chat.id, "ℹ️ Сначала выберите группу", reply_markup=create_main_menu())
             return
 
         group_name = user_data[message.chat.id]['selected_group']
-        msg = bot.send_message(message.chat.id, f"⏳ Загружаю расписание для группы *{group_name}*...",
-                               parse_mode='Markdown')
+        msg = bot.send_message(message.chat.id, f"⏳ Загружаю расписание для группы *{group_name}*...")
 
         parser = MadiScheduleParser()
         if parser.select_group(group_name):
@@ -666,20 +814,169 @@ def send_schedule(message):
             if schedule:
                 formatted = format_schedule(schedule, group_name)
                 bot.delete_message(message.chat.id, msg.message_id)
+
+                # Отправляем расписание с inline-кнопками
+                markup = types.InlineKeyboardMarkup()
+                markup.add(types.InlineKeyboardButton('🔄 Обновить расписание', callback_data='get_schedule'))
+
                 max_length = 4000
                 parts = [formatted[i:i + max_length] for i in range(0, len(formatted), max_length)]
-                for part in parts:
+                for part in parts[:-1]:
                     bot.send_message(message.chat.id, part, parse_mode='Markdown')
+
+                # Последнюю часть отправляем с кнопками
+                bot.send_message(
+                    message.chat.id,
+                    parts[-1],
+                    parse_mode='Markdown',
+                    reply_markup=markup
+                )
             else:
-                bot.edit_message_text("⚠️ Не удалось получить расписание. Попробуйте позже.",
-                                      message.chat.id, msg.message_id)
+                bot.edit_message_text(
+                    "⚠️ Не удалось получить расписание. Попробуйте позже.",
+                    message.chat.id,
+                    msg.message_id
+                )
         else:
-            bot.edit_message_text("⚠️ Ошибка при загрузке расписания. Попробуйте позже.",
-                                  message.chat.id, msg.message_id)
+            bot.edit_message_text(
+                "⚠️ Ошибка при загрузке расписания. Попробуйте позже.",
+                message.chat.id,
+                msg.message_id
+            )
         del parser
 
     except Exception as e:
         bot.send_message(message.chat.id, f"⚠️ Произошла ошибка: {str(e)}")
+
+
+def show_schedule_menu(message):
+    """Показывает меню расписания с inline-кнопками"""
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    btn_group = types.InlineKeyboardButton('👥 Выбрать группу', callback_data='select_group')
+    btn_schedule = types.InlineKeyboardButton('📅 Получить расписание', callback_data='get_schedule')
+    markup.add(btn_group, btn_schedule)
+
+    schedule_text = """
+<b>📅 Расписание МАДИ</b>
+
+Здесь вы можете:
+- Выбрать свою учебную группу
+- Получить актуальное расписание
+- Просмотреть расписание на неделю
+
+Выберите действие:
+"""
+    try:
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=message.message_id,
+            text=schedule_text.strip(),
+            reply_markup=markup,
+            parse_mode='HTML'
+        )
+    except:
+        bot.send_message(
+            message.chat.id,
+            schedule_text.strip(),
+            reply_markup=markup,
+            parse_mode='HTML'
+        )
+
+
+def ask_for_group_name(message):
+    """Просит пользователя ввести номер группы"""
+    msg = bot.send_message(
+        message.chat.id,
+        "✏️ Введите номер вашей группы:",
+        reply_markup=types.ForceReply(selective=True)
+    )
+    bot.register_next_step_handler(msg, process_group_name)
+
+
+def process_group_name(message):
+    """Обрабатывает введенное название группы"""
+    group_name = message.text.strip()
+
+    # Сохраняем группу
+    if 'chat.id' not in user_data:
+        user_data[message.chat.id] = {}
+    user_data[message.chat.id]['selected_group'] = group_name
+
+    # Подтверждаем выбор
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton('👥 Изменить группу', callback_data='select_group'),
+        types.InlineKeyboardButton('📅 Получить расписание', callback_data='get_schedule')
+    )
+
+    bot.send_message(
+        message.chat.id,
+        f"✅ Группа <b>{group_name}</b> сохранена!\nТеперь вы можете получить расписание.",
+        reply_markup=markup,
+        parse_mode='HTML'
+    )
+
+
+def handle_get_schedule(call):
+    """Обрабатывает запрос на получение расписания"""
+    try:
+        if call.message.chat.id not in user_data or 'selected_group' not in user_data[call.message.chat.id]:
+            bot.answer_callback_query(
+                call.id,
+                "ℹ️ Сначала введите номер группы",
+                show_alert=True
+            )
+            return
+
+        group_name = user_data[call.message.chat.id]['selected_group']
+        msg = bot.send_message(call.message.chat.id, f"⏳ Ищу расписание для группы {group_name}...")
+
+        parser = MadiScheduleParser()
+        if parser.select_group(group_name):
+            schedule = parser.get_weekly_schedule()
+            if schedule:
+                formatted = format_schedule(schedule, group_name)
+
+                # Отправляем расписание с кнопкой обновления
+                markup = types.InlineKeyboardMarkup()
+                markup.add(types.InlineKeyboardButton('🔄 Обновить', callback_data='get_schedule'))
+
+                max_length = 4000
+                parts = [formatted[i:i + max_length] for i in range(0, len(formatted), max_length)]
+                for part in parts[:-1]:
+                    bot.send_message(call.message.chat.id, part, parse_mode='Markdown')
+
+                # Последнюю часть отправляем с кнопкой
+                bot.send_message(
+                    call.message.chat.id,
+                    parts[-1],
+                    parse_mode='Markdown',
+                    reply_markup=markup
+                )
+            else:
+                bot.send_message(
+                    call.message.chat.id,
+                    "⚠️ Расписание для указанной группы не найдено",
+                    reply_markup=types.InlineKeyboardMarkup().add(
+                        types.InlineKeyboardButton('👥 Ввести другую группу', callback_data='select_group')
+                    )
+                )
+        else:
+            bot.send_message(
+                call.message.chat.id,
+                "⚠️ Не удалось загрузить расписание. Попробуйте позже.",
+                reply_markup=types.InlineKeyboardMarkup().add(
+                    types.InlineKeyboardButton('🔄 Повторить', callback_data='get_schedule')
+                )
+            )
+        del parser
+
+    except Exception as e:
+        bot.answer_callback_query(
+            call.id,
+            f"⚠️ Ошибка: {str(e)}",
+            show_alert=True
+        )
 # ========================================================================
 # НАВИГАЦИЯ(Разработчики: Резник Игорь, Цапкова Елизавета)
 # ========================================================================
