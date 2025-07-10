@@ -124,7 +124,13 @@ def handle_callback(call):
             "<b>🆘 Помощь</b>\n\n",
             reply_markup=markup
         )
-
+    elif call.data == 'back_to_main':  # Новый обработчик
+        try:
+            bot.delete_message(call.message.chat.id, call.message.message_id)
+        except:
+            pass
+        main(call.message)
+        return
     elif call.message.text == '🔙 Возврат в главное меню':
         handle_back_button(call.message)
 
@@ -272,6 +278,7 @@ def handle_reply_buttons(message):
             "Эй, Москва, держись!\n"
             "МАДИ — врывается ввысь!"
         )
+
         bot.send_message(
             message.chat.id,
             chant_text,
@@ -279,6 +286,7 @@ def handle_reply_buttons(message):
         )
         bot.register_next_step_handler(message, objects_text)
         # Добавьте этот код в раздел обработки текстовых сообщений (функцию handle_reply_buttons)
+
 
     elif message.text == '🔙 Возврат в главное меню':
         handle_back_button(message)
@@ -707,7 +715,8 @@ def show_schedule_menu(message):
     markup = types.InlineKeyboardMarkup(row_width=1)
     btn_group = types.InlineKeyboardButton('👥 Выбрать группу', callback_data='select_group')
     btn_schedule = types.InlineKeyboardButton('📅 Получить расписание', callback_data='get_schedule')
-    markup.add(btn_group, btn_schedule)
+    btn_back = types.InlineKeyboardButton('🔙 Возврат в главное меню', callback_data='back_to_main')  # Новая кнопка
+    markup.add(btn_group, btn_schedule, btn_back)
 
     schedule_text = """
 <b>📅 Расписание МАДИ</b>
