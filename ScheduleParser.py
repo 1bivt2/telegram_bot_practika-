@@ -272,7 +272,6 @@ def handle_reply_buttons(message):
             "Эй, Москва, держись!\n"
             "МАДИ — врывается ввысь!"
         )
-
         bot.send_message(
             message.chat.id,
             chant_text,
