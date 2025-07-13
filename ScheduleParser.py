@@ -23,7 +23,16 @@ def handle_back_button(message):
         pass
     main(message)
 
-
+HELP_INSTRUCTION = """
+<b>❓ Помощь по работе с расписанием</b>
+Для корректной работы требуются следующие условия:
+Google Chrome версии 138 и выше. Посмотреть версию и обновить ее можно тут: chrome://settings/help
+Chromedriver версии как Chrome. После скачивания требуется распаковать и указать
+путь к chromedriver.exe в self.service. Скачать можно тут: https://googlechromelabs.github.io/chrome-for-testing/
+Также установить библиотеки: selenium и bs4
+Если расписание не загружается или работает некорректно:
+- Для работы требуется стабильное интернет-соединение
+"""
 # =======================================================================
 # ОСНОВНОЕ МЕНЮ
 # =======================================================================
@@ -95,6 +104,19 @@ def handle_callback(call):
     elif call.data == 'back_to_schedule':
 
         show_schedule_menu(call.message)
+    elif call.data == 'schedule_help':  # Новая кнопка помощи
+        markup = types.InlineKeyboardMarkup()
+        btn_back = types.InlineKeyboardButton('🔙 Возврат в главное меню', callback_data='back_to_main')
+        markup.add(btn_back)
+
+        bot.edit_message_text(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            text=HELP_INSTRUCTION,
+            reply_markup=markup,
+            parse_mode='HTML'
+        )
+        return
 
     elif call.data == 'traditions':
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -715,8 +737,9 @@ def show_schedule_menu(message):
     markup = types.InlineKeyboardMarkup(row_width=1)
     btn_group = types.InlineKeyboardButton('👥 Выбрать группу', callback_data='select_group')
     btn_schedule = types.InlineKeyboardButton('📅 Получить расписание', callback_data='get_schedule')
-    btn_back = types.InlineKeyboardButton('🔙 Возврат в главное меню', callback_data='back_to_main')  # Новая кнопка
-    markup.add(btn_group, btn_schedule, btn_back)
+    btn_back = types.InlineKeyboardButton('🔙 Возврат в главное меню', callback_data='back_to_main')
+    btn_notwork = types.InlineKeyboardButton('❓ Не работает', callback_data='schedule_help') # Новая кнопка
+    markup.add(btn_group, btn_schedule, btn_back, btn_notwork)
 
     schedule_text = """
 <b>📅 Расписание МАДИ</b>
